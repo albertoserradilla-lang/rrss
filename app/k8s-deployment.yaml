@@ -1,0 +1,79 @@
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mini-twitter-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mini-twitter-backend
+  template:
+    metadata:
+      labels:
+        app: mini-twitter-backend
+    spec:
+      containers:
+        - name: backend
+          image: mini-twitter-backend:v2
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - mountPath: /data
+              name: sqlite-storage
+      volumes:
+        - name: sqlite-storage
+          persistentVolumeClaim:
+            claimName: sqlite-pvc
+
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mini-twitter-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: mini-twitter-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mini-twitter-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mini-twitter-frontend
+  template:
+    metadata:
+      labels:
+        app: mini-twitter-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: mini-twitter-frontend:v2
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mini-twitter-frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: mini-twitter-frontend
+  ports:
+    - port: 80
+      targetPort: 80

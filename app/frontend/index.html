@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Twitter</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        max-width: 600px;
+        margin: auto;
+      }
+      #timeline {
+        list-style: none;
+        padding: 0;
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        margin-bottom: 20px;
+      }
+      #timeline li {
+        padding: 5px;
+        border-bottom: 1px solid #eee;
+      }
+      .timestamp {
+        font-size: 0.8em;
+        color: gray;
+        margin-left: 10px;
+      }
+      #users {
+        margin-bottom: 20px;
+      }
+      input,
+      button {
+        margin: 5px 0;
+        padding: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mini Twitter</h1>
+
+    <h2>Create User</h2>
+    <input id="username" placeholder="Username" />
+    <button onclick="createUser()">Create User</button>
+
+    <h2>Post Message</h2>
+    <input id="message" placeholder="Message" />
+    <button onclick="postMessage()">Post Message</button>
+
+    <h2>Users</h2>
+    <ul id="users"></ul>
+
+    <h2>Timeline</h2>
+    <ul id="timeline"></ul>
+
+    <script>
+      const API = "/backend";
+      // Nombre de servicio interno en cluster
+      const MAX_MSG_LENGTH = 140; // Limitar longitud de mensaje
+
+      async function createUser() {
+        const username = document.getElementById("username").value.trim();
+        if (!username) return alert("Enter a username!");
+        await fetch(`${API}/users?username=${username}`, { method: "POST" });
+        alert("User created!");
+        loadUsers();
+      }
+
+      async function postMessage() {
+        const username = document.getElementById("username").value.trim();
+        let content = document.getElementById("message").value.trim();
+        if (!username || !content)
+          return alert("Username and message required!");
+        if (content.length > MAX_MSG_LENGTH)
+          content = content.slice(0, MAX_MSG_LENGTH) + "...";
+        await fetch(`${API}/messages?username=${username}&content=${content}`, {
+          method: "POST",
+        });
+        document.getElementById("message").value = "";
+        loadTimeline();
+      }
+
+      async function loadTimeline() {
+        try {
+          const res = await fetch(`${API}/messages`);
+          const messages = await res.json();
+          const timeline = document.getElementById("timeline");
+          timeline.innerHTML = "";
+          messages.forEach((m) => {
+            const li = document.createElement("li");
+            const ts = new Date().toLocaleTimeString(); // Timestamp local
+            li.innerHTML = `<strong>${m.username}</strong>: ${m.content} <span class="timestamp">${ts}</span>`;
+            timeline.appendChild(li);
+          });
+          timeline.scrollTop = timeline.scrollHeight; // Auto-scroll
+        } catch (e) {
+          console.error("Failed to load timeline:", e);
+        }
+      }
+
+      async function loadUsers() {
+        try {
+          const res = await fetch(`${API}/users`);
+          const users = await res.json();
+          const ul = document.getElementById("users");
+          ul.innerHTML = "";
+          users.forEach((u) => {
+            const li = document.createElement("li");
+            li.textContent = u.username;
+            ul.appendChild(li);
+          });
+        } catch (e) {
+          console.error("Failed to load users:", e);
+        }
+      }
+
+      // Auto-refresh timeline y usuarios
+      setInterval(loadTimeline, 2000);
+      setInterval(loadUsers, 5000);
+      loadTimeline();
+      loadUsers();
+    </script>
+  </body>
+</html>
