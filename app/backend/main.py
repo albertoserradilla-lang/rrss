@@ -1,23 +1,23 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from models import Base, engine, SessionLocal, User, Message
 
-# Crear las tablas en la base de datos
+# Crear tablas nuevas
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Mini Twitter", root_path="/backend")
 
-# --- CORS middleware ---
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir cualquier origen (para desarrollo local)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Dependencia de DB ---
+# --- DB dependency ---
 def get_db():
     db = SessionLocal()
     try:
@@ -25,31 +25,59 @@ def get_db():
     finally:
         db.close()
 
-# --- Endpoints de usuarios ---
+# --- Users ---
 @app.post("/users")
 def create_user(username: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if user:
+    if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
-    new_user = User(username=username)
-    db.add(new_user)
+    user = User(username=username)
+    db.add(user)
     db.commit()
-    db.refresh(new_user)
-    return {"id": new_user.id, "username": new_user.username}
+    db.refresh(user)
+    return {"id": user.id, "username": user.username}
 
-# --- Endpoints de mensajes ---
+@app.get("/users")
+def list_users(db: Session = Depends(get_db)):
+    return [{"id": u.id, "username": u.username} for u in db.query(User).all()]
+
+# --- Messages ---
 @app.post("/messages")
 def post_message(username: str, content: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    message = Message(username=username, content=content)
-    db.add(message)
+    msg = Message(username=username, content=content)
+    db.add(msg)
     db.commit()
-    db.refresh(message)
-    return {"id": message.id, "username": message.username, "content": message.content}
+    db.refresh(msg)
+    return {"id": msg.id, "username": msg.username, "content": msg.content}
 
 @app.get("/messages")
-def get_messages(db: Session = Depends(get_db)):
-    messages = db.query(Message).all()
+def get_messages(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
+    messages = db.query(Message).order_by(Message.id.desc()).offset(skip).limit(limit).all()
     return [{"id": m.id, "username": m.username, "content": m.content} for m in messages]
+
+
+# --- Like endpoint ---
+@app.post("/messages/{msg_id}/like")
+def like_message(msg_id: int, username: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    msg = db.query(Message).filter(Message.id == msg_id).first()
+    if not user or not msg:
+        raise HTTPException(status_code=404, detail="User or message not found")
+    if user not in msg.likes:
+        msg.likes.append(user)
+        db.commit()
+    return {"message": "Liked!"}
+
+# --- Retweet endpoint ---
+@app.post("/messages/{msg_id}/retweet")
+def retweet_message(msg_id: int, username: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    msg = db.query(Message).filter(Message.id == msg_id).first()
+    if not user or not msg:
+        raise HTTPException(status_code=404, detail="User or message not found")
+    if user not in msg.retweets:
+        msg.retweets.append(user)
+        db.commit()
+    return {"message": "Retweeted!"}

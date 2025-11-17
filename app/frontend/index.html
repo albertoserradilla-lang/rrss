@@ -27,6 +27,9 @@
         color: gray;
         margin-left: 10px;
       }
+      .actions button {
+        margin-left: 5px;
+      }
       #users {
         margin-bottom: 20px;
       }
@@ -55,18 +58,30 @@
     <ul id="timeline"></ul>
 
     <script>
-      const API = "/backend";
-      // Nombre de servicio interno en cluster
-      const MAX_MSG_LENGTH = 140; // Limitar longitud de mensaje
+      const API = "http://192.168.59.101/backend";
+      const MAX_MSG_LENGTH = 140;
 
+      // --- Users ---
       async function createUser() {
         const username = document.getElementById("username").value.trim();
         if (!username) return alert("Enter a username!");
         await fetch(`${API}/users?username=${username}`, { method: "POST" });
-        alert("User created!");
         loadUsers();
       }
 
+      async function loadUsers() {
+        const res = await fetch(`${API}/users`);
+        const users = await res.json();
+        const ul = document.getElementById("users");
+        ul.innerHTML = "";
+        users.forEach((u) => {
+          const li = document.createElement("li");
+          li.textContent = u.username;
+          ul.appendChild(li);
+        });
+      }
+
+      // --- Messages ---
       async function postMessage() {
         const username = document.getElementById("username").value.trim();
         let content = document.getElementById("message").value.trim();
@@ -81,43 +96,50 @@
         loadTimeline();
       }
 
+      async function likeMessage(id) {
+        const username = document.getElementById("username").value.trim();
+        if (!username) return alert("Enter your username to like messages");
+        await fetch(`${API}/messages/${id}/like?username=${username}`, {
+          method: "POST",
+        });
+        loadTimeline();
+      }
+
+      async function retweetMessage(id) {
+        const username = document.getElementById("username").value.trim();
+        if (!username) return alert("Enter your username to retweet messages");
+        await fetch(`${API}/messages/${id}/retweet?username=${username}`, {
+          method: "POST",
+        });
+        loadTimeline();
+      }
+
+      let skip = 0;
+      const limit = 20;
+      const timeline = document.getElementById("timeline");
+
       async function loadTimeline() {
         try {
-          const res = await fetch(`${API}/messages`);
+          const res = await fetch(
+            `http://192.168.59.101/backend/messages?skip=${skip}&limit=${limit}`
+          );
           const messages = await res.json();
-          const timeline = document.getElementById("timeline");
-          timeline.innerHTML = "";
-          messages.forEach((m) => {
+          messages.reverse().forEach((m) => {
             const li = document.createElement("li");
-            const ts = new Date().toLocaleTimeString(); // Timestamp local
-            li.innerHTML = `<strong>${m.username}</strong>: ${m.content} <span class="timestamp">${ts}</span>`;
-            timeline.appendChild(li);
+            li.textContent = `${m.username}: ${m.content}`;
+            timeline.prepend(li); // append older messages on top
           });
-          timeline.scrollTop = timeline.scrollHeight; // Auto-scroll
+          skip += messages.length;
         } catch (e) {
-          console.error("Failed to load timeline:", e);
+          console.error(e);
         }
       }
 
-      async function loadUsers() {
-        try {
-          const res = await fetch(`${API}/users`);
-          const users = await res.json();
-          const ul = document.getElementById("users");
-          ul.innerHTML = "";
-          users.forEach((u) => {
-            const li = document.createElement("li");
-            li.textContent = u.username;
-            ul.appendChild(li);
-          });
-        } catch (e) {
-          console.error("Failed to load users:", e);
-        }
-      }
+      // On scroll to top, load more messages
+      timeline.addEventListener("scroll", () => {
+        if (timeline.scrollTop === 0) loadTimeline();
+      });
 
-      // Auto-refresh timeline y usuarios
-      setInterval(loadTimeline, 2000);
-      setInterval(loadUsers, 5000);
       loadTimeline();
       loadUsers();
     </script>

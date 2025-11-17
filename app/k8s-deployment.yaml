@@ -15,18 +15,10 @@ spec:
     spec:
       containers:
         - name: backend
-          image: mini-twitter-backend:v2
+          image: mini-twitter-backend:v4
           imagePullPolicy: Never
           ports:
             - containerPort: 8000
-          volumeMounts:
-            - mountPath: /data
-              name: sqlite-storage
-      volumes:
-        - name: sqlite-storage
-          persistentVolumeClaim:
-            claimName: sqlite-pvc
-
 ---
 # Backend Service
 apiVersion: v1
@@ -59,7 +51,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: mini-twitter-frontend:v2
+          image: mini-twitter-frontend:v4
           imagePullPolicy: Never
           ports:
             - containerPort: 80
@@ -77,3 +69,70 @@ spec:
   ports:
     - port: 80
       targetPort: 80
+---
+# Postgres
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+type: Opaque
+stringData:
+  POSTGRES_USER: mini_twitter
+  POSTGRES_PASSWORD: password
+  POSTGRES_DB: mini_twitter
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
