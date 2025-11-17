@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Twitter Login</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="auth-container">
+      <h1>Mini Twitter</h1>
+
+      <section class="auth-form">
+        <h2>Login</h2>
+        <input id="login-username" placeholder="Username" />
+        <input id="login-password" type="password" placeholder="Password" />
+        <button onclick="loginUser()">Login</button>
+      </section>
+
+      <section class="auth-form">
+        <h2>Register</h2>
+        <input id="reg-username" placeholder="Username" />
+        <input id="reg-password" type="password" placeholder="Password" />
+        <button onclick="registerUser()">Register</button>
+      </section>
+    </div>
+
+    <script>
+      const API = "http://192.168.59.101/backend";
+
+      async function registerUser() {
+        const username = document.getElementById("reg-username").value.trim();
+        const password = document.getElementById("reg-password").value.trim();
+        if (!username || !password)
+          return alert("Username and password required");
+
+        const res = await fetch(`${API}/users/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert("User registered! Now log in.");
+        } else {
+          alert(data.detail || "Error registering user");
+        }
+      }
+
+      async function loginUser() {
+        const username = document.getElementById("login-username").value.trim();
+        const password = document.getElementById("login-password").value.trim();
+        if (!username || !password)
+          return alert("Username and password required");
+
+        const res = await fetch(`${API}/users/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          localStorage.setItem("currentUser", JSON.stringify(data));
+          window.location.href = "index.html"; // redirige al timeline
+        } else {
+          alert(data.detail || "Login failed");
+        }
+      }
+    </script>
+  </body>
+</html>

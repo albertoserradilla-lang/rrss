@@ -2,11 +2,21 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from models import Base, engine, SessionLocal, User, Message
+from passlib.context import CryptContext
+from pydantic import BaseModel
+import logging
 
 # Crear tablas nuevas
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Mini Twitter", root_path="/backend")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# --- CONFIGURAR LOGGING ---
+logging.basicConfig(
+    level=logging.INFO,              # nivel mínimo de mensajes
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 # --- CORS ---
 app.add_middleware(
@@ -25,43 +35,75 @@ def get_db():
     finally:
         db.close()
 
-# --- Users ---
-@app.post("/users")
-def create_user(username: str, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.username == username).first():
+# --- Schemas ---
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+
+class MessageCreate(BaseModel):
+    username: str
+    content: str
+
+# --- Auth Endpoints ---
+@app.post("/users/register")
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    logging.info(f"Intentando registrar usuario: {user.username}")
+    if db.query(User).filter(User.username == user.username).first():
+        logging.info(f"Intentando registrar usuario: {user.username}")
         raise HTTPException(status_code=400, detail="Username already exists")
-    user = User(username=username)
-    db.add(user)
+    hashed = pwd_context.hash(user.password)
+    user_db = User(username=user.username, hashed_password=hashed)
+    db.add(user_db)
     db.commit()
-    db.refresh(user)
+    db.refresh(user_db)
+    logging.info(f"Intentando registrar usuario: {user.username}")
+    return {"id": user_db.id, "username": user_db.username}
+
+@app.post("/users/login")
+def login_user(username: str, password: str, db: Session = Depends(get_db)):
+    logging.info(f"Login attempt for username: {username}")
+    user = db.query(User).filter(User.username == username).first()
+    
+    if not user:
+        logging.warning(f"Login failed: username '{username}' not found")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    if not pwd_context.verify(password, user.hashed_password):
+        logging.warning(f"Login failed: incorrect password for username '{username}'")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    logging.info(f"Login successful for username: {username}")
     return {"id": user.id, "username": user.username}
 
-@app.get("/users")
+
+# --- Users Endpoints ---
+@app.get("/users", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db)):
-    return [{"id": u.id, "username": u.username} for u in db.query(User).all()]
+    return db.query(User).all()
 
 # --- Messages ---
 @app.post("/messages")
-def post_message(username: str, content: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
+def post_message(msg: MessageCreate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == msg.username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    msg = Message(username=username, content=content)
-    db.add(msg)
+    new_msg = Message(username=msg.username, content=msg.content)
+    db.add(new_msg)
     db.commit()
-    db.refresh(msg)
-    return {"id": msg.id, "username": msg.username, "content": msg.content}
+    db.refresh(new_msg)
+    return {
+        "id": new_msg.id,
+        "username": new_msg.username,
+        "content": new_msg.content
+    }
 
 @app.get("/messages")
 def get_messages(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
-    messages = (
-        db.query(Message)
-        .order_by(Message.id.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
+    messages = db.query(Message).order_by(Message.id.desc()).offset(skip).limit(limit).all()
     return [
         {
             "id": m.id,
@@ -72,7 +114,6 @@ def get_messages(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
         }
         for m in messages
     ]
-
 
 # --- Like endpoint ---
 @app.post("/messages/{msg_id}/like")
@@ -98,4 +139,3 @@ def retweet_message(msg_id: int, username: str, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(msg)
     return {"id": msg.id, "retweets": len(msg.retweets)}
-
