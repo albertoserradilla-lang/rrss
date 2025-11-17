@@ -54,8 +54,24 @@ def post_message(username: str, content: str, db: Session = Depends(get_db)):
 
 @app.get("/messages")
 def get_messages(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
-    messages = db.query(Message).order_by(Message.id.desc()).offset(skip).limit(limit).all()
-    return [{"id": m.id, "username": m.username, "content": m.content} for m in messages]
+    messages = (
+        db.query(Message)
+        .order_by(Message.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "id": m.id,
+            "username": m.username,
+            "content": m.content,
+            "likes": len(m.likes),
+            "retweets": len(m.retweets),
+        }
+        for m in messages
+    ]
 
 
 # --- Like endpoint ---
