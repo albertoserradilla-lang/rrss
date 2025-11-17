@@ -22,11 +22,6 @@
         padding: 5px;
         border-bottom: 1px solid #eee;
       }
-      .timestamp {
-        font-size: 0.8em;
-        color: gray;
-        margin-left: 10px;
-      }
       .actions button {
         margin-left: 5px;
       }
@@ -60,6 +55,10 @@
     <script>
       const API = "http://192.168.59.101/backend";
       const MAX_MSG_LENGTH = 140;
+      let skip = 0;
+      const limit = 20;
+      const timeline = document.getElementById("timeline");
+      let loading = false;
 
       // --- Users ---
       async function createUser() {
@@ -81,7 +80,82 @@
         });
       }
 
-      // --- Messages ---
+      // --- Message helper ---
+      function createMessageElement(m) {
+        const li = document.createElement("li");
+
+        // Message text
+        const textSpan = document.createElement("span");
+        textSpan.textContent = `${m.username}: ${m.content}`;
+        li.appendChild(textSpan);
+
+        // Actions
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "actions";
+
+        const likeBtn = document.createElement("button");
+        likeBtn.textContent = `Like (${m.likes || 0})`;
+        likeBtn.onclick = async () => {
+          const username = document.getElementById("username").value.trim();
+          if (!username) return alert("Enter your username to like messages");
+
+          const res = await fetch(
+            `${API}/messages/${m.id}/like?username=${username}`,
+            { method: "POST" }
+          );
+          const data = await res.json();
+          m.likes = data.likes;
+          likeBtn.textContent = `Like (${m.likes})`;
+        };
+        actionsDiv.appendChild(likeBtn);
+
+        const retweetBtn = document.createElement("button");
+        retweetBtn.textContent = `Retweet (${m.retweets || 0})`;
+        retweetBtn.onclick = async () => {
+          const username = document.getElementById("username").value.trim();
+          if (!username)
+            return alert("Enter your username to retweet messages");
+
+          const res = await fetch(
+            `${API}/messages/${m.id}/retweet?username=${username}`,
+            { method: "POST" }
+          );
+          const data = await res.json();
+          m.retweets = data.retweets;
+          retweetBtn.textContent = `Retweet (${m.retweets})`;
+        };
+        actionsDiv.appendChild(retweetBtn);
+
+        li.appendChild(actionsDiv);
+        return li;
+      }
+
+      // --- Load older messages ---
+      async function loadOlderMessages() {
+        if (loading) return;
+        loading = true;
+
+        try {
+          const res = await fetch(
+            `${API}/messages?skip=${skip}&limit=${limit}`
+          );
+          const messages = await res.json();
+          if (messages.length === 0) return;
+
+          messages.forEach((m) => {
+            const li = createMessageElement(m);
+            timeline.appendChild(li);
+          });
+
+          skip += messages.length;
+        } catch (e) {
+          console.error(e);
+        } finally {
+          loading = false;
+        }
+      }
+
+      // --- Post a new message ---
       async function postMessage() {
         const username = document.getElementById("username").value.trim();
         let content = document.getElementById("message").value.trim();
@@ -89,58 +163,30 @@
           return alert("Username and message required!");
         if (content.length > MAX_MSG_LENGTH)
           content = content.slice(0, MAX_MSG_LENGTH) + "...";
-        await fetch(`${API}/messages?username=${username}&content=${content}`, {
-          method: "POST",
-        });
+
+        const res = await fetch(
+          `${API}/messages?username=${username}&content=${content}`,
+          { method: "POST" }
+        );
+        const message = await res.json();
         document.getElementById("message").value = "";
-        loadTimeline();
+
+        const li = createMessageElement(message);
+        timeline.prepend(li);
       }
 
-      async function likeMessage(id) {
-        const username = document.getElementById("username").value.trim();
-        if (!username) return alert("Enter your username to like messages");
-        await fetch(`${API}/messages/${id}/like?username=${username}`, {
-          method: "POST",
-        });
-        loadTimeline();
-      }
-
-      async function retweetMessage(id) {
-        const username = document.getElementById("username").value.trim();
-        if (!username) return alert("Enter your username to retweet messages");
-        await fetch(`${API}/messages/${id}/retweet?username=${username}`, {
-          method: "POST",
-        });
-        loadTimeline();
-      }
-
-      let skip = 0;
-      const limit = 20;
-      const timeline = document.getElementById("timeline");
-
-      async function loadTimeline() {
-        try {
-          const res = await fetch(
-            `http://192.168.59.101/backend/messages?skip=${skip}&limit=${limit}`
-          );
-          const messages = await res.json();
-          messages.reverse().forEach((m) => {
-            const li = document.createElement("li");
-            li.textContent = `${m.username}: ${m.content}`;
-            timeline.prepend(li); // append older messages on top
-          });
-          skip += messages.length;
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      // On scroll to top, load more messages
+      // Scroll event for pagination
       timeline.addEventListener("scroll", () => {
-        if (timeline.scrollTop === 0) loadTimeline();
+        if (
+          timeline.scrollTop + timeline.clientHeight >=
+          timeline.scrollHeight - 5
+        ) {
+          loadOlderMessages();
+        }
       });
 
-      loadTimeline();
+      // Initial load
+      loadOlderMessages();
       loadUsers();
     </script>
   </body>

@@ -1,4 +1,6 @@
+# -------------------------------
 # Backend Deployment
+# -------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,10 +17,29 @@ spec:
     spec:
       containers:
         - name: backend
-          image: mini-twitter-backend:v4
+          image: mini-twitter-backend:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 8000
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_DB
+            - name: POSTGRES_HOST
+              value: postgres-service
+
 ---
 # Backend Service
 apiVersion: v1
@@ -32,9 +53,10 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
-
 ---
+# -------------------------------
 # Frontend Deployment
+# -------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,7 +73,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: mini-twitter-frontend:v4
+          image: mini-twitter-frontend:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 80
@@ -70,7 +92,9 @@ spec:
     - port: 80
       targetPort: 80
 ---
+# -------------------------------
 # Postgres
+# -------------------------------
 apiVersion: v1
 kind: Secret
 metadata:
@@ -125,6 +149,7 @@ spec:
             claimName: postgres-pvc
 
 ---
+# Postgres Service
 apiVersion: v1
 kind: Service
 metadata:

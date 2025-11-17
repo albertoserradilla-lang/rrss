@@ -62,22 +62,24 @@ def get_messages(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
 @app.post("/messages/{msg_id}/like")
 def like_message(msg_id: int, username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
-    msg = db.query(Message).filter(Message.id == msg_id).first()
+    msg = db.query(Message).options(joinedload(Message.likes)).filter(Message.id == msg_id).first()
     if not user or not msg:
         raise HTTPException(status_code=404, detail="User or message not found")
     if user not in msg.likes:
         msg.likes.append(user)
         db.commit()
-    return {"message": "Liked!"}
+        db.refresh(msg)
+    return {"id": msg.id, "likes": len(msg.likes)}
 
-# --- Retweet endpoint ---
 @app.post("/messages/{msg_id}/retweet")
 def retweet_message(msg_id: int, username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
-    msg = db.query(Message).filter(Message.id == msg_id).first()
+    msg = db.query(Message).options(joinedload(Message.retweets)).filter(Message.id == msg_id).first()
     if not user or not msg:
         raise HTTPException(status_code=404, detail="User or message not found")
     if user not in msg.retweets:
         msg.retweets.append(user)
         db.commit()
-    return {"message": "Retweeted!"}
+        db.refresh(msg)
+    return {"id": msg.id, "retweets": len(msg.retweets)}
+
