@@ -5,8 +5,7 @@ WORKDIR /app
 
 # Instalar dependencias
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && python -c "import bcrypt; print('bcrypt version in image:', bcrypt.__version__)"
+RUN pip install --no-cache-dir -r requirements.txt 
 
 # Copiar código
 COPY . .
