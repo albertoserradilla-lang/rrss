@@ -42,14 +42,13 @@
       <aside class="rightbar">
         <h2>Trending</h2>
         <ul>
-          <li>#ChatGPT</li>
-          <li>#DarkMode</li>
-          <li>#JavaScript</li>
-          <li>#WebDev</li>
+          <li>#A</li>
+          <li>#B</li>
+          <li>#C</li>
+          <li>#Webo</li>
         </ul>
       </aside>
     </div>
-
     <script>
       const API = "http://192.168.59.101/backend";
       const MAX_MSG_LENGTH = 140;
@@ -58,35 +57,15 @@
         loading = false;
       const timeline = document.getElementById("timeline");
 
-      // Verificar usuario logueado
+      // Usuario logueado
       const currentUser = JSON.parse(localStorage.getItem("currentUser"));
       if (!currentUser) window.location.href = "login.html";
 
-      // --- Users ---
-      async function createUser() {
-        const username = document.getElementById("username").value.trim();
-        if (!username) return alert("Enter a username!");
-        await fetch(`${API}/users?username=${username}`, { method: "POST" });
-        loadUsers();
-      }
-
-      async function loadUsers() {
-        const res = await fetch(`${API}/users`);
-        const users = await res.json();
-        const ul = document.getElementById("users");
-        ul.innerHTML = "";
-        users.forEach((u) => {
-          const li = document.createElement("li");
-          li.textContent = u.username;
-          ul.appendChild(li);
-        });
-      }
-
-      // --- Message helper ---
+      // --- Helper para crear mensaje ---
       function createMessageElement(m) {
         const li = document.createElement("li");
 
-        // Message text
+        // Texto del mensaje
         const textSpan = document.createElement("span");
         textSpan.textContent = `${m.username}: ${m.content}`;
         li.appendChild(textSpan);
@@ -95,36 +74,71 @@
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "actions";
 
+        // --- Like ---
         const likeBtn = document.createElement("button");
-        likeBtn.textContent = `Like (${m.likes || 0})`;
-        likeBtn.onclick = async () => {
-          const username = document.getElementById("username").value.trim();
-          if (!username) return alert("Enter your username to like messages");
+        const userLiked =
+          m.likes_users?.includes(currentUser.username) || false;
+        likeBtn.textContent = `❤️ ${m.likes || 0}`;
+        if (userLiked) likeBtn.classList.add("liked");
 
-          const res = await fetch(
-            `${API}/messages/${m.id}/like?username=${username}`,
-            { method: "POST" }
-          );
-          const data = await res.json();
-          m.likes = data.likes;
-          likeBtn.textContent = `Like (${m.likes})`;
+        likeBtn.onclick = async () => {
+          try {
+            const res = await fetch(
+              `${API}/messages/${m.id}/like?username=${currentUser.username}`,
+              { method: "POST" }
+            );
+            if (!res.ok) {
+              const err = await res.json();
+              return alert(err.detail || "Error toggling like");
+            }
+            const data = await res.json();
+            m.likes = data.likes;
+            if (likeBtn.classList.contains("liked")) {
+              likeBtn.classList.remove("liked");
+              const index = m.likes_users.indexOf(currentUser.username);
+              if (index >= 0) m.likes_users.splice(index, 1);
+            } else {
+              likeBtn.classList.add("liked");
+              m.likes_users.push(currentUser.username);
+            }
+            likeBtn.textContent = `❤️ ${m.likes}`;
+          } catch (e) {
+            console.error(e);
+          }
         };
         actionsDiv.appendChild(likeBtn);
 
+        // --- Retweet ---
         const retweetBtn = document.createElement("button");
-        retweetBtn.textContent = `Retweet (${m.retweets || 0})`;
-        retweetBtn.onclick = async () => {
-          const username = document.getElementById("username").value.trim();
-          if (!username)
-            return alert("Enter your username to retweet messages");
+        const userRetweeted =
+          m.retweets_users?.includes(currentUser.username) || false;
+        retweetBtn.textContent = `🔁 ${m.retweets || 0}`;
+        if (userRetweeted) retweetBtn.classList.add("retweeted");
 
-          const res = await fetch(
-            `${API}/messages/${m.id}/retweet?username=${username}`,
-            { method: "POST" }
-          );
-          const data = await res.json();
-          m.retweets = data.retweets;
-          retweetBtn.textContent = `Retweet (${m.retweets})`;
+        retweetBtn.onclick = async () => {
+          try {
+            const res = await fetch(
+              `${API}/messages/${m.id}/retweet?username=${currentUser.username}`,
+              { method: "POST" }
+            );
+            if (!res.ok) {
+              const err = await res.json();
+              return alert(err.detail || "Error toggling retweet");
+            }
+            const data = await res.json();
+            m.retweets = data.retweets;
+            if (retweetBtn.classList.contains("retweeted")) {
+              retweetBtn.classList.remove("retweeted");
+              const index = m.retweets_users.indexOf(currentUser.username);
+              if (index >= 0) m.retweets_users.splice(index, 1);
+            } else {
+              retweetBtn.classList.add("retweeted");
+              m.retweets_users.push(currentUser.username);
+            }
+            retweetBtn.textContent = `🔁 ${m.retweets}`;
+          } catch (e) {
+            console.error(e);
+          }
         };
         actionsDiv.appendChild(retweetBtn);
 
@@ -132,11 +146,10 @@
         return li;
       }
 
-      // --- Load older messages ---
+      // --- Cargar mensajes ---
       async function loadOlderMessages() {
         if (loading) return;
         loading = true;
-
         try {
           const res = await fetch(
             `${API}/messages?skip=${skip}&limit=${limit}`
@@ -148,7 +161,6 @@
             const li = createMessageElement(m);
             timeline.appendChild(li);
           });
-
           skip += messages.length;
         } catch (e) {
           console.error(e);
@@ -157,27 +169,37 @@
         }
       }
 
-      // --- Post a new message ---
+      // --- Postear mensaje ---
       async function postMessage() {
-        const username = document.getElementById("username").value.trim();
+        const username = currentUser.username;
         let content = document.getElementById("message").value.trim();
         if (!username || !content)
           return alert("Username and message required!");
         if (content.length > MAX_MSG_LENGTH)
           content = content.slice(0, MAX_MSG_LENGTH) + "...";
 
-        const res = await fetch(
-          `${API}/messages?username=${username}&content=${content}`,
-          { method: "POST" }
-        );
-        const message = await res.json();
-        document.getElementById("message").value = "";
-
-        const li = createMessageElement(message);
-        timeline.prepend(li);
+        try {
+          const res = await fetch(`${API}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, content }),
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            return alert(err.detail || "Error posting message");
+          }
+          const message = await res.json();
+          message.likes_users = [];
+          message.retweets_users = [];
+          document.getElementById("message").value = "";
+          const li = createMessageElement(message);
+          timeline.prepend(li);
+        } catch (e) {
+          console.error(e);
+        }
       }
 
-      // Scroll event for pagination
+      // Scroll infinito
       timeline.addEventListener("scroll", () => {
         if (
           timeline.scrollTop + timeline.clientHeight >=
@@ -187,12 +209,11 @@
         }
       });
 
-      // Initial load
+      // Inicial
       loadOlderMessages();
-      loadUsers();
       const toggleBtn = document.getElementById("themeToggle");
 
-      // Cambiar tema manualmente
+      // Cambiar tema al hacer click
       toggleBtn.onclick = () => {
         document.body.classList.toggle("dark");
 
@@ -205,10 +226,13 @@
         }
       };
 
-      // Cargar preferencia al abrir la página
+      // Aplicar tema guardado al cargar
       if (localStorage.getItem("theme") === "dark") {
         document.body.classList.add("dark");
         toggleBtn.textContent = "☀️";
+      } else {
+        document.body.classList.remove("dark");
+        toggleBtn.textContent = "🌙";
       }
     </script>
   </body>

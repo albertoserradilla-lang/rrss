@@ -39,7 +39,11 @@ def get_db():
 class UserCreate(BaseModel):
     username: str
     password: str
-
+    
+class UserLogin(BaseModel):
+    username: str
+    password: str
+    
 class UserOut(BaseModel):
     id: int
     username: str
@@ -49,35 +53,41 @@ class MessageCreate(BaseModel):
     content: str
 
 # --- Auth Endpoints ---
-@app.post("/users/register")
+@app.post("/users/register", response_model=UserOut)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    logging.info(f"Intentando registrar usuario: {user.username}")
-    if db.query(User).filter(User.username == user.username).first():
-        logging.info(f"Intentando registrar usuario: {user.username}")
-        raise HTTPException(status_code=400, detail="Username already exists")
-    hashed = pwd_context.hash(user.password)
-    user_db = User(username=user.username, hashed_password=hashed)
-    db.add(user_db)
-    db.commit()
-    db.refresh(user_db)
-    logging.info(f"Intentando registrar usuario: {user.username}")
-    return {"id": user_db.id, "username": user_db.username}
+    logging.info(f"Attempting to register user: {user.username}")
 
-@app.post("/users/login")
-def login_user(username: str, password: str, db: Session = Depends(get_db)):
-    logging.info(f"Login attempt for username: {username}")
-    user = db.query(User).filter(User.username == username).first()
-    
-    if not user:
-        logging.warning(f"Login failed: username '{username}' not found")
+    existing_user = db.query(User).filter(User.username == user.username).first()
+    if existing_user:
+        logging.warning(f"Registration failed: username '{user.username}' already exists")
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    hashed_password = pwd_context.hash(user.password)
+    db_user = User(username=user.username, hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+
+    logging.info(f"User registered successfully: {user.username}")
+    return db_user
+
+
+@app.post("/users/login", response_model=UserOut)
+def login_user(user: UserLogin, db: Session = Depends(get_db)):
+    logging.info(f"Login attempt for username: {user.username}")
+
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if not db_user:
+        logging.warning(f"Login failed: username '{user.username}' not found")
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    
-    if not pwd_context.verify(password, user.hashed_password):
-        logging.warning(f"Login failed: incorrect password for username '{username}'")
+
+    if not pwd_context.verify(user.password, db_user.hashed_password):
+        logging.warning(f"Login failed: incorrect password for username '{user.username}'")
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    
-    logging.info(f"Login successful for username: {username}")
-    return {"id": user.id, "username": user.username}
+
+    logging.info(f"Login successful for username: {user.username}")
+    return db_user
+
 
 
 # --- Users Endpoints ---
@@ -105,37 +115,50 @@ def post_message(msg: MessageCreate, db: Session = Depends(get_db)):
 def get_messages(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
     messages = db.query(Message).order_by(Message.id.desc()).offset(skip).limit(limit).all()
     return [
-        {
-            "id": m.id,
-            "username": m.username,
-            "content": m.content,
-            "likes": len(m.likes),
-            "retweets": len(m.retweets),
-        }
-        for m in messages
-    ]
+    {
+        "id": m.id,
+        "username": m.username,
+        "content": m.content,
+        "likes": len(m.likes),
+        "retweets": len(m.retweets),
+        "likes_users": [u.username for u in m.likes],        # <-- agregado
+        "retweets_users": [u.username for u in m.retweets],  # <-- agregado
+    }
+    for m in messages
+]
 
-# --- Like endpoint ---
+
+
+# Like/unlike endpoint
 @app.post("/messages/{msg_id}/like")
-def like_message(msg_id: int, username: str, db: Session = Depends(get_db)):
+def toggle_like(msg_id: int, username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     msg = db.query(Message).options(joinedload(Message.likes)).filter(Message.id == msg_id).first()
     if not user or not msg:
         raise HTTPException(status_code=404, detail="User or message not found")
-    if user not in msg.likes:
+    
+    if user in msg.likes:
+        msg.likes.remove(user)
+    else:
         msg.likes.append(user)
-        db.commit()
-        db.refresh(msg)
+    
+    db.commit()
+    db.refresh(msg)
     return {"id": msg.id, "likes": len(msg.likes)}
 
+# Retweet/un-retweet endpoint
 @app.post("/messages/{msg_id}/retweet")
-def retweet_message(msg_id: int, username: str, db: Session = Depends(get_db)):
+def toggle_retweet(msg_id: int, username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     msg = db.query(Message).options(joinedload(Message.retweets)).filter(Message.id == msg_id).first()
     if not user or not msg:
         raise HTTPException(status_code=404, detail="User or message not found")
-    if user not in msg.retweets:
+    
+    if user in msg.retweets:
+        msg.retweets.remove(user)
+    else:
         msg.retweets.append(user)
-        db.commit()
-        db.refresh(msg)
+    
+    db.commit()
+    db.refresh(msg)
     return {"id": msg.id, "retweets": len(msg.retweets)}

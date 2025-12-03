@@ -1,12 +1,13 @@
 /* App grid con auth panel */
 .app-container {
   display: grid;
-  grid-template-columns: 220px 180px 1fr 250px;
+  grid-template-columns: 220px 1fr 250px; /* sidebar | main | rightbar */
   gap: 20px;
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
 }
+
 
 .sidebar, .rightbar, .auth-panel {
   position: sticky;
@@ -59,6 +60,16 @@ input, button {
 input:focus {
   border-color: #1da1f2;
 }
+.actions button.liked {
+  color: #e0245e; /* rojo corazón */
+  font-weight: bold;
+}
+
+.actions button.retweeted {
+  color: #17bf63; /* verde retweet */
+  font-weight: bold;
+}
+
 
 button {
   background-color: #1da1f2;
@@ -198,12 +209,39 @@ body.dark #timeline::-webkit-scrollbar-thumb {
   position: fixed;
   top: 10px;
   right: 10px;
-  padding: 8px 12px;
-  font-size: 20px;
+  width: 50px;           /* ancho clicable */
+  height: 50px;          /* alto clicable */
+  font-size: 24px;       /* tamaño del emoji */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
-  background: transparent;
+  border-radius: 50%;    /* opcional, para que sea redondo */
+  background: rgba(0,0,0,0.1);  /* ligera transparencia */
   cursor: pointer;
   color: inherit;
+  z-index: 1000;
+  transition: background 0.2s;
+}
+/* Likes y Retweets en Dark Mode */
+body.dark .actions button.liked {
+  color: #e0245e; /* rojo corazón */
+  font-weight: bold;
+}
+
+body.dark .actions button.retweeted {
+  color: #17bf63; /* verde retweet */
+  font-weight: bold;
+}
+
+/* Opcional: hover más claro para visual feedback */
+body.dark .actions button.liked:hover,
+body.dark .actions button.retweeted:hover {
+  background-color: #3a3a3a;
+}
+
+.theme-btn:hover {
+  background: rgba(0,0,0,0.2);
 }
 
 /* Responsive */
